@@ -1,0 +1,152 @@
+import ui
+import numpy as np
+from collections import deque
+
+class PuzzleSolver(ui.View):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.grid = np.zeros((3, 3), dtype=int)
+        self.solution_steps = []
+        self.current_step = -1
+        
+        # Create grid buttons
+        self.buttons = [[None for _ in range(3)] for _ in range(3)]
+        for row in range(3):
+            for col in range(3):
+                btn = ui.Button(title="0", action=self.make_toggle_action(row, col))
+                btn.frame = (col * 50 + 10, row * 50 + 10, 40, 40)
+                btn.border_width = 1
+                btn.border_color = 'black'
+                self.buttons[row][col] = btn
+                self.add_subview(btn)
+
+        # Start and navigation buttons
+        self.start_button = ui.Button(title="Start", action=self.solve_puzzle)
+        self.start_button.frame = (60, 170, 100, 40)
+        self.add_subview(self.start_button)
+
+        self.forward_button = ui.Button(title="Forward", action=self.forward)
+        self.forward_button.frame = (120, 220, 80, 40)
+        self.forward_button.enabled = False
+        self.add_subview(self.forward_button)
+
+        self.backward_button = ui.Button(title="Backward", action=self.backward)
+        self.backward_button.frame = (20, 220, 80, 40)
+        self.backward_button.enabled = False
+        self.add_subview(self.backward_button)
+    
+    def make_toggle_action(self, row, col):
+        """Create a toggle action for a specific cell."""
+        def toggle_action(sender):
+            self.toggle_cell(row, col)
+        return toggle_action
+    
+    def toggle_cell(self, row, col):
+        """Toggle cell and update button text."""
+        self.grid[row, col] ^= 1
+        self.buttons[row][col].title = str(self.grid[row, col])
+    
+    def solve_puzzle(self, sender):
+        """Solve the puzzle and store the solution steps."""
+        self.solution_steps = self.find_solution(np.copy(self.grid))
+        if self.solution_steps:
+            self.current_step = -1
+            self.forward_button.enabled = True
+            self.backward_button.enabled = False
+            self.update_grid(np.copy(self.grid))  # Reset grid display
+        else:
+            print("No solution found.")
+    
+    def forward(self, sender):
+        """Move forward in the solution steps."""
+        if self.current_step < len(self.solution_steps) - 1:
+            self.current_step += 1
+            row, col = self.solution_steps[self.current_step]
+            self.toggle_grid_display(row, col)
+            self.backward_button.enabled = True
+            if self.current_step == len(self.solution_steps) - 1:
+                self.forward_button.enabled = False
+    
+    def backward(self, sender):
+        """Move backward in the solution steps."""
+        if self.current_step >= 0:
+            row, col = self.solution_steps[self.current_step]
+            self.toggle_grid_display(row, col)
+            self.current_step -= 1
+            self.forward_button.enabled = True
+            if self.current_step == -1:
+                self.backward_button.enabled = False
+
+    def toggle_grid_display(self, row, col):
+        """Toggle cell and adjacent cells on the display."""
+        self.toggle_cell(row, col)  # Toggle the selected cell
+        self.highlight_button(row, col, 'yellow')
+        
+        # Toggle and highlight adjacent cells in green
+        if row > 0:
+            self.toggle_cell(row - 1, col)  # Top
+            self.highlight_button(row - 1, col, 'green')
+        if row < 2:
+            self.toggle_cell(row + 1, col)  # Bottom
+            self.highlight_button(row + 1, col, 'green')
+        if col > 0:
+            self.toggle_cell(row, col - 1)  # Left
+            self.highlight_button(row, col - 1, 'green')
+        if col < 2:
+            self.toggle_cell(row, col + 1)  # Right
+            self.highlight_button(row, col + 1, 'green')
+        
+    def highlight_button(self, row, col, color):
+        """Highlight a button temporarily with the specified color."""
+        self.buttons[row][col].background_color = color
+        ui.delay(lambda: setattr(self.buttons[row][col], 'background_color', None), 0.2)
+
+    def update_grid(self, grid):
+        """Update the button text to reflect the grid state."""
+        for row in range(3):
+            for col in range(3):
+                self.grid[row, col] = grid[row, col]
+                self.buttons[row][col].title = str(grid[row, col])
+
+    def toggle(self, grid, row, col):
+        """Toggle a cell and its neighbors."""
+        grid[row, col] ^= 1
+        if row > 0:
+            grid[row - 1, col] ^= 1
+        if row < 2:
+            grid[row + 1, col] ^= 1
+        if col > 0:
+            grid[row, col - 1] ^= 1
+        if col < 2:
+            grid[row, col + 1] ^= 1
+
+    def find_solution(self, grid):
+        """Find the solution using an iterative BFS approach."""
+        queue = deque([(np.copy(grid), [])])
+        visited = set()
+        visited.add(tuple(map(tuple, grid)))
+
+        while queue:
+            current_grid, moves = queue.popleft()
+
+            # Check if solution is found
+            if np.all(current_grid == 1):
+                return moves
+            
+            # Try toggling each cell
+            for r in range(3):
+                for c in range(3):
+                    new_grid = np.copy(current_grid)
+                    self.toggle(new_grid, r, c)
+                    grid_tuple = tuple(map(tuple, new_grid))
+                    
+                    if grid_tuple not in visited:
+                        visited.add(grid_tuple)
+                        queue.append((new_grid, moves + [(r, c)]))
+
+        return None
+
+# Run the UI in Pythonista
+view = PuzzleSolver(frame=(0, 0, 320, 480))  # Adjusted frame for full-screen
+view.present('full_screen')  # Changed 'sheet' to 'full_screen'
